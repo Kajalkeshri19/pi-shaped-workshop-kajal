@@ -1,0 +1,1 @@
+SECRET_KEY = 's3cr3t_hardcoded_value_for_demo_purposes'

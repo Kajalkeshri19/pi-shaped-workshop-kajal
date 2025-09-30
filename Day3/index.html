@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+<head>
+    <title>Vulnerable Flask Demo</title>
+</head>
+<body>
+<h1>Flask Vulnerable App</h1>
+<form action="/run" method="post">
+    <label for="code">Run code (dangerous):</label>
+    <input id="code" name="code" value="1+1" />
+    <button type="submit">Run</button>
+</form>
+<p>Visit <a href="/secret">/secret</a> to see the hardcoded secret preview.</p>
+</body>
+</html>

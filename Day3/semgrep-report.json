@@ -1,0 +1,50 @@
+                   
+                   
+┌─────────────────┐
+│ 5 Code Findings │
+└─────────────────┘
+                         
+  [36m[22m[24m  app.py[0m
+    ❯❱ [1mpython.django.security.injection.code.user-eval.user-eval[0m
+          Found user data in a call to 'eval'. This is extremely dangerous because it can enable an attacker
+          to execute arbitrary remote code on the system. Instead, refactor your code to not use 'eval' and 
+          instead use a safe library for the specific functionality you need.                               
+          Details: https://sg.run/PJDW                                                                      
+                                                                                                            
+           22┆ user_code = request.form.get('code', '')
+           23┆ try:
+           24┆     result = eval(user_code)  # INTENTIONAL vulnerability for demo
+           25┆     return jsonify({'result': str(result)})
+           26┆ except Exception as e:
+           27┆     return jsonify({'error': str(e)}), 400
+   
+   ❯❯❱ [1mpython.flask.security.injection.user-eval.eval-injection[0m
+          Detected user data flowing into eval. This is code injection and should be avoided.
+          Details: https://sg.run/5QpX                                                       
+                                                                                             
+           24┆ result = eval(user_code)  # INTENTIONAL vulnerability for demo
+   
+    ❯❱ [1mpython.lang.security.audit.eval-detected.eval-detected[0m
+          Detected the use of eval(). eval() can be dangerous if used to evaluate dynamic content. If this 
+          content can be input from outside the program, this may be a code injection vulnerability. Ensure
+          evaluated content is not definable by external sources.                                          
+          Details: https://sg.run/ZvrD                                                                     
+                                                                                                           
+           24┆ result = eval(user_code)  # INTENTIONAL vulnerability for demo
+   
+    ❯❱ [1mpython.flask.security.audit.app-run-param-config.avoid_app_run_with_bad_host[0m
+          Running flask app with host 0.0.0.0 could expose the server publicly.
+          Details: https://sg.run/eLby                                         
+                                                                               
+           38┆ app.run(host='0.0.0.0', port=5000)
+                             
+  [36m[22m[24m  index.html[0m
+    ❯❱ [1mpython.django.security.django-no-csrf-token.django-no-csrf-token[0m
+          Manually-created forms in django templates should specify a csrf_token to prevent CSRF attacks.
+          Details: https://sg.run/N0Bp                                                                   
+                                                                                                         
+            8┆ <form action="/run" method="post">
+            9┆     <label for="code">Run code (dangerous):</label>
+           10┆     <input id="code" name="code" value="1+1" />
+           11┆     <button type="submit">Run</button>
+           12┆ </form>

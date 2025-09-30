@@ -1,0 +1,70 @@
+stages:
+  - pip install -r requirements.txt
+  - python -m pip install gunicorn
+  # Run flask app with gunicorn in background so subsequent jobs (in same runner) can access it
+  - nohup gunicorn -w 1 -b 0.0.0.0:${APP_PORT} app:app &
+  - sleep 2
+  - curl -s ${APP_URL} || true
+artifacts:
+expire_in: 1h
+when: always
+paths:
+  - requirements.txt
+
+
+# Bandit scan — generate HTML report
+bandit:
+stage: bandit
+image: python:3.10-slim
+script:
+  - pip install bandit
+  - bandit -r . -f html -o bandit-report.html || true
+artifacts:
+when: always
+expire_in: 1h
+paths:
+  - bandit-report.html
+
+
+# Semgrep scan — generate JSON report
+semgrep:
+stage: semgrep
+image: returntocorp/semgrep:latest
+script:
+  - semgrep --config auto --output semgrep-report.json || true
+artifacts:
+when: always
+expire_in: 1h
+paths:
+  - semgrep-report.json
+
+
+# Gitleaks scan — detect hardcoded secrets and produce JSON report
+gitleaks:
+stage: gitleaks
+image: zricethezav/gitleaks:latest
+script:
+  - /bin/gitleaks detect --source . --report-format json --report-path gitleaks-report.json || true
+artifacts:
+when: always
+expire_in: 1h
+paths:
+  - gitleaks-report.json
+
+
+# OWASP ZAP DAST — run baseline scan against running app and produce HTML report
+zap:
+stage: zap
+image: owasp/zap2docker-stable
+variables:
+ZAP_BASELINE_OPTS: "-t ${APP_URL} -r zap-report.html -m 0"
+script:
+  # Wait for the app to be ready (simple check)
+  - for i in {1..10}; do curl -s ${APP_URL} && break || sleep 1; done
+  - /zap/zap-baseline.py -t ${APP_URL} -r zap-report.html -J zap-report.json || true
+artifacts:
+when: always
+expire_in: 1h
+paths:
+  - zap-report.html
+  - zap-report.json
