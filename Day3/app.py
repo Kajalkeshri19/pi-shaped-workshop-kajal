@@ -7,7 +7,7 @@ app.config['SECRET_KEY'] = SECRET_KEY
 
 
 # Intentionally insecure: DEBUG True and exposing eval on input
-app.debug = True
+app.debug = False
 
 
 @app.route('/')
@@ -16,15 +16,15 @@ def index():
 
 
 # Vulnerable endpoint: executes user input (dangerous)
-@app.route('/run', methods=['POST'])
-def run_code():
-    # Insecure: using eval on user-supplied data
-    user_code = request.form.get('code', '')
-    try:
-        result = eval(user_code)  # INTENTIONAL vulnerability for demo
-        return jsonify({'result': str(result)})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 400
+# @app.route('/run', methods=['POST'])
+# def run_code():
+#     # Insecure: using eval on user-supplied data
+#     user_code = request.form.get('code', '')
+#     try:
+#         result = eval(user_code)  # INTENTIONAL vulnerability for demo
+#         return jsonify({'result': str(result)})
+#     except Exception as e:
+#         return jsonify({'error': str(e)}), 400
 
 
 # Hardcoded credentials in source (also in config.py)
