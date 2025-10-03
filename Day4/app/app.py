@@ -1,3 +1,6 @@
+import ast
+
+
 from flask import Flask, request, jsonify
 from vulnerable_module import get_secret_message
 
@@ -15,7 +18,8 @@ def index():
 def compute():
     expr = request.args.get('expr', '1+1')
     # INSECURE: eval on user input (deliberate vulnerability for CI demo)
-    result = eval(expr)
+    result = ast.literal_eval(expr)
+
     return jsonify({'expr': expr, 'result': result})
 
 @app.route('/secret')

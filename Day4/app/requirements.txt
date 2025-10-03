@@ -1,2 +1,6 @@
-Flask==1.1.2
-requests==2.19.1
+# inside venv, upgrade packages:
+pip install --upgrade Flask requests
+
+# update requirements file with only relevant packages and versions
+pip freeze | grep -E 'Flask|requests' > app/requirements.txt
+
