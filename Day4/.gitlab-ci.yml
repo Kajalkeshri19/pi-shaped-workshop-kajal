@@ -1,0 +1,53 @@
+image: docker:stable
+
+stages:
+  - build
+  - scans
+  - dast
+
+variables:
+  DOCKER_HOST: tcp://docker:2375/
+  DOCKER_DRIVER: overlay2
+
+services:
+  - docker:20-dind
+
+before_script:
+  - apk add --no-cache bash curl python3 py3-pip
+  - pip3 install --upgrade pip
+
+build:
+  stage: build
+  script:
+    - pip3 install -r app/requirements.txt
+  artifacts:
+    paths:
+      - .
+
+bandit_semgrep_trivy:
+  stage: scans
+  script:
+    - pip3 install bandit semgrep
+    - bandit -r app -f html -o bandit-report.html || true
+    - semgrep --config=p/ci --json --output semgrep-report.json app || true
+    - curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+    - trivy fs --scanners vuln --format json -o trivy-report.json app || true
+  artifacts:
+    when: always
+    paths:
+      - bandit-report.html
+      - semgrep-report.json
+      - trivy-report.json
+
+owasp_zap:
+  stage: dast
+  script:
+    - chmod +x scripts/run_zap.sh || true
+    - apk add --no-cache docker-cli
+    - python3 -m flask run --host=0.0.0.0 --port=5000 &
+    - sleep 5
+    - docker run --rm --network host owasp/zap2docker-stable zap-baseline.py -t http://127.0.0.1:5000 -r zap-report.html || true
+  artifacts:
+    when: always
+    paths:
+      - zap-report.html

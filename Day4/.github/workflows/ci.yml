@@ -1,0 +1,63 @@
+name: CI - DevSecOps Scans
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  scans:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r app/requirements.txt
+          pip install bandit semgrep trivy
+
+      - name: Run Bandit (HTML)
+        run: |
+          bandit -r app -f html -o bandit-report.html || true
+        continue-on-error: true
+
+      - name: Run Semgrep
+        run: |
+          semgrep --config=p/ci --json --output semgrep-report.json app || true
+        continue-on-error: true
+
+      - name: Run Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+          trivy fs --scanners vuln --format json -o trivy-report.json app || true
+        continue-on-error: true
+
+      - name: Start Flask app
+        run: |
+          cd app
+          python -m flask run --host=0.0.0.0 --port=5000 &
+          sleep 3
+        env:
+          FLASK_APP: app.py
+
+      - name: Run OWASP ZAP baseline
+        run: |
+          docker run --rm --network host owasp/zap2docker-stable zap-baseline.py -t http://127.0.0.1:5000 -r zap-report.html || true
+        continue-on-error: true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: devsecops-reports
+          path: |
+            bandit-report.html
+            semgrep-report.json
+            trivy-report.json
+            zap-report.html
