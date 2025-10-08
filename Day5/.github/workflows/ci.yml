@@ -1,0 +1,171 @@
+name: CI Security Scan Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      python-version: 3.10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+  install-deps:
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install pip tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit semgrep checkov gitleaks trivy==0.45.0
+
+      - name: Upload workspace for next steps
+        uses: actions/upload-artifact@v4
+        with:
+          name: workspace
+          path: .
+
+  bandit:
+    runs-on: ubuntu-latest
+    needs: install-deps
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Bandit (SAST for Python)
+        run: |
+          pip install bandit
+          bandit -r app -f html -o bandit-report.html || true
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.html
+
+  semgrep:
+    runs-on: ubuntu-latest
+    needs: install-deps
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Semgrep patterns
+        run: |
+          pip install semgrep
+          semgrep --config=auto -j 4 --json > semgrep-report.json || true
+      - name: Upload Semgrep report
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-report
+          path: semgrep-report.json
+
+  trivy-deps:
+    runs-on: ubuntu-latest
+    needs: install-deps
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+          trivy --version
+      - name: Scan Python dependencies (requirements.txt)
+        run: |
+          trivy config --format json --output trivy-config.json .
+          trivy fs --security-checks vuln --format json --output trivy-deps-report.json app || true
+      - name: Upload Trivy deps report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-deps-report
+          path: trivy-deps-report.json
+
+  trivy-docker:
+    runs-on: ubuntu-latest
+    needs: install-deps
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: |
+          docker build -t demo-flask-app:latest app
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+      - name: Scan Docker image
+        run: |
+          trivy image --format json --output trivy-docker-report.json demo-flask-app:latest || true
+      - name: Upload Trivy docker report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-docker-report
+          path: trivy-docker-report.json
+
+  checkov:
+    runs-on: ubuntu-latest
+    needs: install-deps
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Checkov on infra
+        run: |
+          pip install checkov
+          checkov -d infrastructure -o json > checkov-report.json || true
+      - name: Upload Checkov report
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkov-report
+          path: checkov-report.json
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    needs: install-deps
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Gitleaks
+        run: |
+          curl -sSfL https://github.com/zricethezav/gitleaks/releases/latest/download/gitleaks_$(uname -s)_$(uname -m).tar.gz \
+            | tar -xzf - -C /tmp
+          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+      - name: Run Gitleaks
+        run: |
+          gitleaks detect --source . --report-format=json --report-path=gitleaks-report.json || true
+      - name: Upload Gitleaks report
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.json
+
+  zap-dast:
+    runs-on: ubuntu-latest
+    needs: trivy-docker
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image (again) and run container
+        run: |
+          docker build -t demo-flask-app:latest app
+          # run the container in background for ZAP to scan
+          docker run -d --name demo-scan -p 5000:5000 demo-flask-app:latest
+      - name: Wait for app to start
+        run: |
+          sleep 10
+      - name: Run OWASP ZAP baseline scan
+        run: |
+          docker run --rm --network host -v $(pwd):/zap/wrk owasp/zap2docker-stable zap-baseline.py -t http://host.docker.internal:5000 -r zap-report.html || true
+      - name: Archive ZAP report
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          path: zap-report.html
+
+  finalize:
+    runs-on: ubuntu-latest
+    needs: [bandit, semgrep, trivy-deps, trivy-docker, checkov, gitleaks, zap-dast]
+    steps:
+      - name: List artifacts step (CI finished)
+        run: |
+          echo "All scans finished. Download artifacts from this run."

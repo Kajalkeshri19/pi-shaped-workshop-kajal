@@ -1,0 +1,7 @@
+# .gitleaks.toml
+title = "Gitleaks config"
+
+[[rules]]
+description = "Example: detect AWS secret"
+regex = '''AKIA[0-9A-Z]{16}'''
+tags = ["key", "aws"]
